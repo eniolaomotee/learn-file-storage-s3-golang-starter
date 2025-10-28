@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"log"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
+	"encoding/base64"
 )
 
 func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Request) {
-	log.Println("hello guys")
 	videoIDString := r.PathValue("videoID")
 	videoID, err := uuid.Parse(videoIDString)
 	if err != nil {
@@ -53,9 +52,6 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	log.Printf("file is %s",contentType)
-
-
 	// read image data 
 	data, err := io.ReadAll(file)
 	if err != nil{
@@ -74,20 +70,18 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// save thumbnail in global map
-	videoThumbnails[videoID] = thumbnail{
-		data: data,
-		mediaType: contentType,
-	}
+	//convert image data to base64 to be stored in db
+	imageData := base64.StdEncoding.EncodeToString(data)
 
-	// update video metadata
-	url := fmt.Sprintf("http://localhost:%s/api/thumbnails/%s",cfg.port, videoID)
-	videoMeta.ThumbnailURL = &url
-	
+	//create a new data url
+	dbMediaUrl := fmt.Sprintf("data:%s;base64,%s", contentType,imageData)
+
+	// storing the url in the thumbnail url of the db
+	videoMeta.ThumbnailURL = &dbMediaUrl
+
 
 	err = cfg.db.UpdateVideo(videoMeta)
 	if err != nil{
-		delete(videoThumbnails,videoID)
 		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
 		return
 	}
