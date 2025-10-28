@@ -25,7 +25,7 @@ type apiConfig struct {
 }
 
 type thumbnail struct {
-	data      []byte
+	data []byte
 	mediaType string
 }
 
