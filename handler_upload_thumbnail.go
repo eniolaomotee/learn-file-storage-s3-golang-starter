@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
-	"io"
+	"log"
 	"net/http"
+	"strings"
+	"path/filepath"
+	"os"
+	"io"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
-	"encoding/base64"
 )
 
 func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Request) {
@@ -53,11 +56,11 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	}
 
 	// read image data 
-	data, err := io.ReadAll(file)
-	if err != nil{
-		respondWithError(w, http.StatusInternalServerError, "Couldn't read image data", err)
-		return
-	}
+	// data, err := io.ReadAll(file)
+	// if err != nil{
+	// 	respondWithError(w, http.StatusInternalServerError, "Couldn't read image data", err)
+	// 	return
+	// }
 
 	videoMeta, err := cfg.db.GetVideo(videoID)
 	if err != nil{
@@ -70,14 +73,40 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	//convert image data to base64 to be stored in db
-	imageData := base64.StdEncoding.EncodeToString(data)
+	// get file extension
+	content := strings.Split(contentType, "/")
+	file_ext := content[1]
 
-	//create a new data url
-	dbMediaUrl := fmt.Sprintf("data:%s;base64,%s", contentType,imageData)
+	// Create a unique filename using the video ID
+	videoIDStr := videoID.String()
+	log.Printf("VideoIdstr: %s", videoIDStr)
 
-	// storing the url in the thumbnail url of the db
-	videoMeta.ThumbnailURL = &dbMediaUrl
+	// Build full file path inside asset directory
+	new_path := filepath.Join(cfg.assetsRoot,fmt.Sprintf("%s.%s",videoIDStr,file_ext))
+	log.Printf("new file created: %s", new_path)
+
+
+	// create a new file in the assest directory
+	f, err := os.Create(new_path)
+	if err != nil{
+		respondWithError(w, http.StatusBadRequest, "error occured creating file", err)
+		return
+	}
+	defer f.Close()
+
+	// Copy uploaded file data to the new file
+	if _, err := io.Copy(f,file); err != nil{
+		respondWithError(w, http.StatusBadRequest, "error occured copying file", err)
+		return
+	}
+
+	// Construct the public Url for accessing this thumbnail
+	url := fmt.Sprintf("http://localhost:%s/assets/%s.%s", cfg.port,videoIDStr,file_ext)
+	log.Printf("Thumbnail url: %s", url)
+
+	
+	// Update the thumbnail URL of the db
+	videoMeta.ThumbnailURL = &url
 
 
 	err = cfg.db.UpdateVideo(videoMeta)
